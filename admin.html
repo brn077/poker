@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poker Osasco — ADM</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080a0f;color:#fff;font-family:Arial,Helvetica,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:30px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px}
+h1{margin:0;font-size:32px}h1 span{color:#d39a31}.badge{padding:9px 14px;border-radius:20px;background:#17251c;color:#6ee09b;font-weight:800}
+.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:20px}.panel{background:#12151c;border:1px solid #2b3039;border-radius:16px;padding:22px}
+h2{margin:0 0 18px;color:#d39a31;font-size:19px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.field.full{grid-column:1/-1}label{display:block;color:#9da3ad;font-size:12px;font-weight:700;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase}
+input,select{width:100%;padding:13px;border-radius:8px;border:1px solid #3a404b;background:#080a0e;color:#fff;font-size:16px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}button{padding:14px;border:0;border-radius:9px;background:#bd8525;color:white;font-weight:900;cursor:pointer}button.dark{background:#2a3039}button.red{background:#87352e}
+.levels{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;max-height:480px;overflow:auto}.lvl{padding:12px;background:#0b0d12;border:1px solid #292e37;border-radius:8px;cursor:pointer}.lvl b{color:#d39a31}.lvl.active{border-color:#d39a31;background:#211b10}
+.bigtime{font-size:64px;font-weight:900;font-variant-numeric:tabular-nums;text-align:center;padding:15px;color:#d39a31}
+.hint{color:#777e89;font-size:12px;line-height:1.5;margin-top:14px}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.fields{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><h1>POKER <span>OSASCO</span> — ADM</h1><div class="badge" id="connection">PAINEL DE CONTROLE</div></header>
+<div class="grid">
+<section class="panel">
+<h2>CONTROLE DO TORNEIO</h2>
+<div class="bigtime" id="preview">20:00</div>
+<div class="fields">
+<div class="field full"><label>Nome do torneio</label><input id="name" value="TORNEIO PRINCIPAL"></div>
+<div class="field"><label>Nível</label><input id="level" type="number" min="1" value="1"></div>
+<div class="field"><label>Duração do nível (min)</label><input id="minutes" type="number" min="1" value="20"></div>
+<div class="field"><label>Jogadores</label><input id="players" type="number" value="0"></div>
+<div class="field"><label>Entradas</label><input id="entries" type="number" value="0"></div>
+<div class="field full"><label>Prize Pool</label><input id="prize" value="R$ 0"></div>
+<div class="field"><label>Status</label><input id="status" value="TORNEIO EM ANDAMENTO"></div>
+<div class="field"><label>Próximo evento</label><input id="nextEvent" value="NÍVEL SEGUINTE"></div>
+</div>
+<div class="actions">
+<button onclick="apply()">APLICAR</button><button class="dark" onclick="pause()">PAUSAR / CONTINUAR</button>
+<button onclick="prev()">← NÍVEL ANTERIOR</button><button onclick="next()">PRÓXIMO NÍVEL →</button>
+<button onclick="resetTime()">REINICIAR TEMPO</button><button class="red" onclick="resetAll()">RESET GERAL</button>
+</div>
+<div class="hint">A TV não possui painel de edição. Ela apenas escuta as alterações publicadas por este ADM em tempo real.</div>
+</section>
+<section class="panel">
+<h2>ESTRUTURA DE BLINDS</h2>
+<div class="levels" id="levels"></div>
+<div class="hint">Clique em qualquer nível para selecioná-lo. A tela da TV muda imediatamente.</div>
+</section>
+</div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="config.js"></script>
+<script>
+var levels=[[100,200],[150,300],[200,400],[250,500],[300,600],[400,800],[500,1000],[600,1200],[800,1600],[1000,2000],[1500,3000],[2000,4000],[2500,5000],[3000,6000],[4000,8000],[5000,10000]];
+var state={name:"TORNEIO PRINCIPAL",level:1,seconds:1200,minutes:20,players:0,entries:0,prize:"R$ 0",status:"TORNEIO EM ANDAMENTO",nextEvent:"NÍVEL SEGUINTE",paused:false};
+var ref=null;
+function $(x){return document.getElementById(x)} function ft(s){s=Math.max(0,Math.floor(s));var m=Math.floor(s/60),x=s%60;return (m<10?"0":"")+m+":"+(x<10?"0":"")+x}
+function render(){$("preview").textContent=ft(state.seconds);$("level").value=state.level;$("name").value=state.name;$("minutes").value=state.minutes;$("players").value=state.players;$("entries").value=state.entries;$("prize").value=state.prize;$("status").value=state.status;$("nextEvent").value=state.nextEvent;drawLevels()}
+function drawLevels(){var h="";for(var i=0;i<levels.length;i++)h+='<div class="lvl '+(i+1==state.level?'active':'')+'" onclick="choose('+(i+1)+')"><b>NÍVEL '+(i+1)+'</b><br>'+levels[i][0].toLocaleString("pt-BR")+' / '+levels[i][1].toLocaleString("pt-BR")+'</div>'; $("levels").innerHTML=h}
+function publish(){if(ref)ref.set(state)}
+function apply(){state.name=$("name").value||"TORNEIO PRINCIPAL";state.level=Math.max(1,Math.min(levels.length,parseInt($("level").value)||1));state.minutes=Math.max(1,parseInt($("minutes").value)||20);state.players=parseInt($("players").value)||0;state.entries=parseInt($("entries").value)||0;state.prize=$("prize").value||"R$ 0";state.status=$("status").value||"TORNEIO EM ANDAMENTO";state.nextEvent=$("nextEvent").value||"NÍVEL SEGUINTE";if(state.seconds<=0)state.seconds=state.minutes*60;state.updatedAt=Date.now();publish();render()}
+function choose(n){state.level=n;state.seconds=state.minutes*60;state.paused=false;publish();render()}
+function pause(){state.paused=!state.paused;publish();render()}
+function resetTime(){state.seconds=state.minutes*60;state.paused=false;publish();render()}
+function next(){if(state.level<levels.length)state.level++;state.seconds=state.minutes*60;state.paused=false;publish();render()}
+function prev(){if(state.level>1)state.level--;state.seconds=state.minutes*60;publish();render()}
+function resetAll(){if(confirm("Resetar torneio?")){state={name:"TORNEIO PRINCIPAL",level:1,seconds:1200,minutes:20,players:0,entries:0,prize:"R$ 0",status:"TORNEIO EM ANDAMENTO",nextEvent:"NÍVEL SEGUINTE",paused:false};publish();render()}}
+setInterval(function(){if(!state.paused&&state.seconds>0){state.seconds--;publish();render()}else if(!state.paused&&state.seconds===0){next()}},1000);
+try{
+ if(firebaseConfig.apiKey!=="COLE_AQUI"){firebase.initializeApp(firebaseConfig);ref=firebase.database().ref("poker_osasco/current");ref.on("value",function(s){var v=s.val();if(v){state=v;render()}else{publish()}});$("connection").textContent="CONECTADO AO SERVIDOR"}
+ else $("connection").textContent="CONFIGURE O FIREBASE";
+}catch(e){$("connection").textContent="ERRO DE CONFIGURAÇÃO"}
+render();
+</script>
+</body></html>
