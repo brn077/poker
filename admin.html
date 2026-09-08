@@ -60,13 +60,23 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
     </div>
     <div class="actions">
       <button onclick="apply()">SALVAR ALTERAÇÕES</button>
-      <button class="d" onclick="pause()">PAUSAR / CONTINUAR</button>
+      <button class="d" id="btnPause" onclick="pause()">PAUSAR / CONTINUAR</button>
       <button class="d" onclick="resetTime()">REINICIAR NÍVEL</button>
       <button onclick="prev()">← ANTERIOR</button>
       <button onclick="next()">PRÓXIMO →</button>
       <button class="r" onclick="resetAll()">RESET GERAL</button>
     </div>
     <p class="hint">"REINICIAR NÍVEL" zera só o cronômetro do nível atual. "RESET GERAL" zera jogadores/prize/nível e recomeça o torneio carregado do zero.</p>
+
+    <div class="fields" style="margin-top:16px">
+      <div><label>AJUSTAR TEMPO — MIN</label><input id="adjMin" type="number" min="0" value="0"></div>
+      <div><label>AJUSTAR TEMPO — SEG</label><input id="adjSec" type="number" min="0" max="59" value="0"></div>
+    </div>
+    <div class="actions" style="grid-template-columns:1fr 1fr">
+      <button class="r" onclick="adjustTime(-1)">− DIMINUIR TEMPO</button>
+      <button class="d" onclick="adjustTime(1)">+ ADICIONAR TEMPO</button>
+    </div>
+    <p class="hint">Ajusta o tempo restante do nível atual, funciona rodando ou pausado.</p>
   </section>
 
   <section class="p"><h2>ESTRUTURA ATIVA</h2>
@@ -143,6 +153,7 @@ function render(){
   ["name","level","players","maxPlayers","entries","avgStack","prize","status","breakText","logoUrl"].forEach(function(k){q(k).value=S[k]??""});
 
   q("activeName").textContent=S.tournamentName?("Torneio carregado: "+S.tournamentName):"Nenhum torneio carregado (usando estrutura padrão)";
+  q("btnPause").textContent=S.running?"PAUSAR":"▶ INICIAR";
 
   q("levels").innerHTML=lv().map(function(x,i){
     return '<div class="lv '+(S.level==i+1?"on":"")+'" onclick="chooseLevel('+(i+1)+')"><b>NÍVEL '+String(i+1).padStart(2,"0")+'</b><br>'+x[0].toLocaleString("pt-BR")+' / '+x[1].toLocaleString("pt-BR")+'<i>Ante '+(x[2]||0).toLocaleString("pt-BR")+' · '+(x[3]||20)+' min</i></div>';
@@ -182,10 +193,10 @@ function chooseLevel(x){
   x=Math.max(1,Math.min(levels.length,x));
   S.level=x;
   var mins=(levels[x-1]&&levels[x-1][3])?levels[x-1][3]:20;
-  S.running=true;
-  S.endAt=Date.now()+mins*60000;
-  S.pausedMs=0;
-  S.playStartAt=S.playStartAt||Date.now();
+  var ms=mins*60000;
+  /* Preserva se estava rodando ou pausado — só troca pro tempo cheio do novo nível */
+  if(S.running){S.endAt=Date.now()+ms}
+  else{S.pausedMs=ms}
   pub();
 }
 
@@ -205,10 +216,23 @@ function pause(){
 function resetTime(){
   var levels=lv();
   var mins=(levels[S.level-1]&&levels[S.level-1][3])?levels[S.level-1][3]:20;
-  S.running=true;
-  S.endAt=Date.now()+mins*60000;
-  S.pausedMs=0;
-  S.playStartAt=S.playStartAt||Date.now();
+  var ms=mins*60000;
+  if(S.running){S.endAt=Date.now()+ms}
+  else{S.pausedMs=ms}
+  pub();
+}
+
+/* ===== Ajuste fino do tempo restante do nível atual (em minutos/segundos) ===== */
+function adjustTime(sign){
+  var mins=Math.max(0,+q("adjMin").value||0);
+  var secs=Math.max(0,+q("adjSec").value||0);
+  var deltaMs=(mins*60+secs)*1000*sign;
+  if(!deltaMs)return;
+  if(S.running){
+    S.endAt=Math.max(Date.now(),S.endAt+deltaMs);
+  }else{
+    S.pausedMs=Math.max(0,(S.pausedMs||0)+deltaMs);
+  }
   pub();
 }
 
@@ -238,10 +262,10 @@ function loadTournament(id){
   S.name=tItem.name;
   S.levels=levels;
   S.level=1;
-  S.running=true;
-  S.endAt=Date.now()+((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
-  S.pausedMs=0;
-  S.playStartAt=Date.now();
+  S.running=false;
+  S.endAt=null;
+  S.pausedMs=((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
+  S.playStartAt=null;
   S.playedAccumMs=0;
   S.players=0;S.maxPlayers=0;S.entries=0;S.avgStack=0;
   S.prize="R$ 0";S.status="EM ANDAMENTO";S.breakText="—";
