@@ -1,21 +1,169 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Poker Osasco ADM</title><style>*{box-sizing:border-box}body{margin:0;background:#080a0f;color:#fff;font-family:Arial,sans-serif}.w{max-width:1150px;margin:auto;padding:24px}h1 span,h2{color:#e2a82f}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}.p{background:#12151c;border:1px solid #2d333e;border-radius:14px;padding:20px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.full{grid-column:1/-1}label{display:block;color:#9fa6b1;font-size:11px;font-weight:800;margin-bottom:6px}input{width:100%;padding:13px;background:#080a0f;border:1px solid #3c4451;border-radius:8px;color:#fff;font-size:16px}.time{font-size:60px;color:#e2a82f;text-align:center;font-weight:900}.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;font-weight:900;cursor:pointer}.d{background:#29303a}.r{background:#8b3730}.levels{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:550px;overflow:auto}.lv{padding:12px;background:#090b10;border:1px solid #2d333e;border-radius:8px;cursor:pointer}.lv b{color:#e2a82f}.lv i{display:block;color:#7d8390;font-style:normal;font-size:11px;margin-top:2px}.on{border-color:#e2a82f}.ok{color:#70e5a0}@media(max-width:800px){.grid,.fields{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}}@media(max-width:480px){.actions{grid-template-columns:1fr}}</style></head><body><div class="w"><header><h1>POKER <span>OSASCO</span> — ADM</h1><b id="conn">MODO LOCAL</b></header><div class="grid"><section class="p"><h2>CONTROLE AO VIVO</h2><div class="time" id="pv">20:00</div><div class="fields"><div class="full"><label>NOME DO TORNEIO</label><input id="name"></div><div><label>NÍVEL</label><input id="level" type="number"></div><div><label>DURAÇÃO (MIN)</label><input id="minutes" type="number"></div><div><label>JOGADORES</label><input id="players" type="number"></div><div><label>CAPACIDADE</label><input id="maxPlayers" type="number"></div><div><label>ENTRADAS</label><input id="entries" type="number"></div><div><label>MÉDIA (FICHAS)</label><input id="avgStack" type="number"></div><div><label>PRIZE POOL</label><input id="prize"></div><div><label>STATUS</label><input id="status"></div><div><label>INTERVALO EM</label><input id="breakText"></div><div class="full"><label>LOGO (URL, opcional)</label><input id="logoUrl" placeholder="https://..."></div></div><div class="actions"><button onclick="apply()">SALVAR ALTERAÇÕES</button><button class="d" onclick="pause()">PAUSAR / CONTINUAR</button><button class="d" onclick="resetTime()">REINICIAR</button><button onclick="prev()">← ANTERIOR</button><button onclick="next()">PRÓXIMO →</button><button class="r" onclick="resetAll()">RESET</button></div></section><section class="p"><h2>ESTRUTURA DE BLINDS</h2><div class="levels" id="levels"></div></section></div></div><script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script><script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script><script src="config.js"></script><script>
-/* Cada nível: [small blind, big blind, ante] */
-var L=[[100,200,0],[150,300,0],[200,400,0],[250,500,0],[300,600,0],[400,800,0],[500,1000,0],[600,1200,0],[800,1600,0],[1000,2000,0],[1500,3000,0],[2000,4000,0],[2500,5000,0],[3000,6000,0],[4000,8000,0],[5000,10000,0]],
-S={name:"TORNEIO DOS AMIGOS",level:1,seconds:1200,minutes:20,players:0,maxPlayers:0,entries:0,avgStack:0,prize:"R$ 0",status:"EM ANDAMENTO",paused:false,playedSeconds:0,breakText:"—",logoUrl:""},R=null;
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Poker Osasco ADM</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#080a0f;color:#fff;font-family:Arial,sans-serif}
+h1 span,h2{color:#e2a82f}
+.w{max-width:1150px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.grid{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}
+.p{background:#12151c;border:1px solid #2d333e;border-radius:14px;padding:20px;margin-top:18px}
+.grid .p{margin-top:0}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.full{grid-column:1/-1}
+label{display:block;color:#9fa6b1;font-size:11px;font-weight:800;margin-bottom:6px}
+input{width:100%;padding:13px;background:#080a0f;border:1px solid #3c4451;border-radius:8px;color:#fff;font-size:16px}
+.time{font-size:60px;color:#e2a82f;text-align:center;font-weight:900}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}
+button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;font-weight:900;cursor:pointer;font-size:13px}
+.d{background:#29303a}
+.r{background:#8b3730}
+.levels{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:550px;overflow:auto}
+.lv{padding:12px;background:#090b10;border:1px solid #2d333e;border-radius:8px;cursor:pointer}
+.lv b{color:#e2a82f}
+.lv i{display:block;color:#7d8390;font-style:normal;font-size:11px;margin-top:2px}
+.on{border-color:#e2a82f}
+.ok{color:#70e5a0}
+.tcard{padding:14px;background:#090b10;border:1px solid #2d333e;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.tcard b{color:#e2a82f;display:block}
+.tcard i{color:#7d8390;font-style:normal;font-size:12px}
+.tcard .active{color:#70e5a0;font-size:11px;font-weight:800;margin-left:8px}
+.tbtns{display:flex;gap:6px;flex-wrap:wrap}
+.tbtns button{padding:9px 12px;font-size:12px}
+.hint{color:#7d8390;font-size:12px;margin:8px 0 0}
+.lvlrow{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 40px;gap:6px;align-items:center;margin-bottom:6px}
+.lvlrow span{color:#7d8390;font-size:10px;font-weight:800;text-transform:uppercase}
+.lvlhead{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 40px;gap:6px;margin-bottom:6px}
+.lvlhead span{color:#7d8390;font-size:10px;font-weight:800;text-transform:uppercase}
+.lvlrow input{padding:9px;font-size:13px}
+.lvlrow button{padding:9px;background:#8b3730}
+.editorlevels{max-height:400px;overflow:auto;margin-top:10px}
+@media(max-width:800px){.grid,.fields{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.lvlrow,.lvlhead{grid-template-columns:1fr 1fr 1fr 1fr 1fr 32px}}
+@media(max-width:480px){.actions{grid-template-columns:1fr}}
+</style></head>
+<body><div class="w">
+
+<header><h1>POKER <span>OSASCO</span> — ADM</h1><b id="conn">MODO LOCAL</b></header>
+
+<div class="grid">
+  <section class="p"><h2>CONTROLE AO VIVO</h2>
+    <div class="time" id="pv">20:00</div>
+    <div class="fields">
+      <div class="full"><label>NOME DO TORNEIO (na tela)</label><input id="name"></div>
+      <div><label>NÍVEL ATUAL</label><input id="level" type="number" min="1"></div>
+      <div><label>JOGADORES</label><input id="players" type="number"></div>
+      <div><label>CAPACIDADE</label><input id="maxPlayers" type="number"></div>
+      <div><label>ENTRADAS</label><input id="entries" type="number"></div>
+      <div><label>MÉDIA (FICHAS)</label><input id="avgStack" type="number"></div>
+      <div><label>PRIZE POOL</label><input id="prize"></div>
+      <div><label>STATUS</label><input id="status"></div>
+      <div><label>INTERVALO EM</label><input id="breakText"></div>
+      <div class="full"><label>LOGO (URL, opcional)</label><input id="logoUrl" placeholder="https://..."></div>
+    </div>
+    <div class="actions">
+      <button onclick="apply()">SALVAR ALTERAÇÕES</button>
+      <button class="d" onclick="pause()">PAUSAR / CONTINUAR</button>
+      <button class="d" onclick="resetTime()">REINICIAR NÍVEL</button>
+      <button onclick="prev()">← ANTERIOR</button>
+      <button onclick="next()">PRÓXIMO →</button>
+      <button class="r" onclick="resetAll()">RESET GERAL</button>
+    </div>
+    <p class="hint">"REINICIAR NÍVEL" zera só o cronômetro do nível atual. "RESET GERAL" zera jogadores/prize/nível e recomeça o torneio carregado do zero.</p>
+  </section>
+
+  <section class="p"><h2>ESTRUTURA ATIVA</h2>
+    <p class="hint" id="activeName">Nenhum torneio carregado</p>
+    <div class="levels" id="levels"></div>
+  </section>
+</div>
+
+<section class="p"><h2>TORNEIOS SALVOS</h2>
+  <div id="tlist"></div>
+  <button onclick="openEditor(null)">+ NOVO TORNEIO</button>
+</section>
+
+<section class="p" id="editorPanel" style="display:none">
+  <h2 id="editorTitle">Novo Torneio</h2>
+  <div class="fields">
+    <div class="full"><label>NOME DO TORNEIO</label><input id="edName"></div>
+  </div>
+  <div class="editorlevels">
+    <div class="lvlhead"><span>Nível</span><span>SB</span><span>BB</span><span>Ante</span><span>Min</span><span></span></div>
+    <div id="edLevels"></div>
+  </div>
+  <div class="actions" style="grid-template-columns:1fr 1fr 1fr">
+    <button onclick="addEditorLevel()">+ NÍVEL</button>
+    <button onclick="saveTournament()">SALVAR TORNEIO</button>
+    <button class="d" onclick="closeEditor()">CANCELAR</button>
+  </div>
+</section>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="config.js"></script>
+<script>
+/* ===== Estrutura padrão usada quando não há nenhum torneio carregado / ao criar um novo ===== */
+var DEFAULT_LEVELS=[
+  [100,200,0,20],[150,300,0,20],[200,400,0,20],[250,500,0,20],
+  [300,600,0,20],[400,800,0,20],[500,1000,0,20],[600,1200,0,20],
+  [800,1600,0,20],[1000,2000,0,20],[1500,3000,0,20],[2000,4000,0,20],
+  [2500,5000,0,20],[3000,6000,0,20],[4000,8000,0,20],[5000,10000,0,20]
+];
+
+/* ===== Estado atual (o que a tela da TV mostra) ===== */
+var S={
+  name:"TORNEIO DOS AMIGOS",levels:clone(DEFAULT_LEVELS),level:1,
+  running:true,endAt:Date.now()+20*60000,pausedMs:0,
+  playStartAt:Date.now(),playedAccumMs:0,
+  players:0,maxPlayers:0,entries:0,avgStack:0,prize:"R$ 0",
+  status:"EM ANDAMENTO",breakText:"—",logoUrl:"",
+  tournamentId:null,tournamentName:""
+};
+
+/* ===== Torneios salvos (biblioteca de estruturas) ===== */
+var TS={}; // {id: {name, levels:[[sb,bb,ante,min],...]}}
+var editingId=null;
+var editorRows=[];
+
+var CR=null,TR=null;
+
+function clone(x){return JSON.parse(JSON.stringify(x))}
 function q(x){return document.getElementById(x)}
 function f(x){x=Math.max(0,Math.floor(+x||0));return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0")}
-function render(){
-  q("pv").textContent=f(S.seconds);
-  ["name","level","minutes","players","maxPlayers","entries","avgStack","prize","status","breakText","logoUrl"].forEach(function(k){q(k).value=S[k]??""});
-  q("levels").innerHTML=L.map(function(x,i){
-    return '<div class="lv '+(S.level==i+1?"on":"")+'" onclick="choose('+(i+1)+')"><b>NÍVEL '+String(i+1).padStart(2,"0")+'</b><br>'+x[0].toLocaleString("pt-BR")+' / '+x[1].toLocaleString("pt-BR")+'<i>Ante '+(x[2]||0).toLocaleString("pt-BR")+'</i></div>';
-  }).join("");
+function lv(){return (S.levels&&S.levels.length)?S.levels:DEFAULT_LEVELS}
+
+function remainingMs(){
+  if(S.running){ if(!S.endAt) return 0; return Math.max(0,S.endAt-Date.now()); }
+  return Math.max(0,S.pausedMs||0);
 }
-function pub(){if(R)R.set(S);else localStorage.setItem("po_state",JSON.stringify(S))}
+
+/* ===== Render ===== */
+function render(){
+  q("pv").textContent=f(Math.floor(remainingMs()/1000));
+  ["name","level","players","maxPlayers","entries","avgStack","prize","status","breakText","logoUrl"].forEach(function(k){q(k).value=S[k]??""});
+
+  q("activeName").textContent=S.tournamentName?("Torneio carregado: "+S.tournamentName):"Nenhum torneio carregado (usando estrutura padrão)";
+
+  q("levels").innerHTML=lv().map(function(x,i){
+    return '<div class="lv '+(S.level==i+1?"on":"")+'" onclick="chooseLevel('+(i+1)+')"><b>NÍVEL '+String(i+1).padStart(2,"0")+'</b><br>'+x[0].toLocaleString("pt-BR")+' / '+x[1].toLocaleString("pt-BR")+'<i>Ante '+(x[2]||0).toLocaleString("pt-BR")+' · '+(x[3]||20)+' min</i></div>';
+  }).join("");
+
+  q("tlist").innerHTML=Object.keys(TS).length?Object.keys(TS).map(function(id){
+    var tItem=TS[id];
+    var isActive=S.tournamentId===id;
+    return '<div class="tcard"><div><b>'+tItem.name+(isActive?'<span class="active">EM USO</span>':'')+'</b><i>'+(tItem.levels?tItem.levels.length:0)+' níveis</i></div>'+
+      '<div class="tbtns"><button onclick="loadTournament(\''+id+'\')">USAR NA TELA</button><button class="d" onclick="openEditor(\''+id+'\')">EDITAR</button><button class="r" onclick="deleteTournament(\''+id+'\')">EXCLUIR</button></div></div>';
+  }).join(""):'<p class="hint">Nenhum torneio salvo ainda. Clique em "+ NOVO TORNEIO" pra criar sua primeira estrutura de blinds.</p>';
+}
+
+/* ===== Persistência do estado atual ===== */
+function pub(){
+  if(CR)CR.set(S);else localStorage.setItem("po_state",JSON.stringify(S));
+  render();
+}
+
 function apply(){
   S.name=q("name").value.trim()||"TORNEIO";
-  S.level=Math.max(1,Math.min(L.length,+q("level").value||1));
-  S.minutes=Math.max(1,+q("minutes").value||20);
   S.players=Math.max(0,+q("players").value||0);
   S.maxPlayers=Math.max(0,+q("maxPlayers").value||0);
   S.entries=Math.max(0,+q("entries").value||0);
@@ -24,21 +172,179 @@ function apply(){
   S.status=q("status").value.trim()||"EM ANDAMENTO";
   S.breakText=q("breakText").value.trim()||"—";
   S.logoUrl=q("logoUrl").value.trim();
-  pub();render();
+  var lvl=Math.max(1,Math.min(lv().length,+q("level").value||S.level));
+  if(lvl!==S.level){chooseLevel(lvl);return}
+  pub();
 }
-function choose(x){S.level=x;S.seconds=S.minutes*60;S.paused=false;pub();render()}
-function pause(){S.paused=!S.paused;pub();render()}
-function resetTime(){S.seconds=S.minutes*60;S.paused=false;pub();render()}
-function next(){if(S.level<L.length)S.level++;resetTime()}
-function prev(){if(S.level>1)S.level--;resetTime()}
-function resetAll(){if(confirm("Resetar?")){S={name:"TORNEIO DOS AMIGOS",level:1,seconds:1200,minutes:20,players:0,maxPlayers:0,entries:0,avgStack:0,prize:"R$ 0",status:"EM ANDAMENTO",paused:false,playedSeconds:0,breakText:"—",logoUrl:""};pub();render()}}
+
+function chooseLevel(x){
+  var levels=lv();
+  x=Math.max(1,Math.min(levels.length,x));
+  S.level=x;
+  var mins=(levels[x-1]&&levels[x-1][3])?levels[x-1][3]:20;
+  S.running=true;
+  S.endAt=Date.now()+mins*60000;
+  S.pausedMs=0;
+  S.playStartAt=S.playStartAt||Date.now();
+  pub();
+}
+
+function pause(){
+  if(S.running){
+    S.pausedMs=remainingMs();
+    S.playedAccumMs=(S.playedAccumMs||0)+(Date.now()-(S.playStartAt||Date.now()));
+    S.running=false;
+  }else{
+    S.endAt=Date.now()+(S.pausedMs||0);
+    S.playStartAt=Date.now();
+    S.running=true;
+  }
+  pub();
+}
+
+function resetTime(){
+  var levels=lv();
+  var mins=(levels[S.level-1]&&levels[S.level-1][3])?levels[S.level-1][3]:20;
+  S.running=true;
+  S.endAt=Date.now()+mins*60000;
+  S.pausedMs=0;
+  S.playStartAt=S.playStartAt||Date.now();
+  pub();
+}
+
+function next(){chooseLevel(S.level+1)}
+function prev(){chooseLevel(S.level-1)}
+
+function resetAll(){
+  if(!confirm("Isso vai reiniciar o torneio carregado do nível 1, zerando jogadores/prize/tempo. Confirma?"))return;
+  var levels=lv();
+  S.level=1;
+  S.running=true;
+  S.endAt=Date.now()+((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
+  S.pausedMs=0;
+  S.playStartAt=Date.now();
+  S.playedAccumMs=0;
+  S.players=0;S.maxPlayers=0;S.entries=0;S.avgStack=0;
+  S.prize="R$ 0";S.status="EM ANDAMENTO";S.breakText="—";
+  pub();
+}
+
+/* ===== Carregar um torneio salvo pra tela ===== */
+function loadTournament(id){
+  var tItem=TS[id];
+  if(!tItem)return;
+  if(!confirm('Carregar "'+tItem.name+'" na tela agora? Isso reinicia jogadores, prize e o cronômetro.'))return;
+  var levels=clone(tItem.levels&&tItem.levels.length?tItem.levels:DEFAULT_LEVELS);
+  S.name=tItem.name;
+  S.levels=levels;
+  S.level=1;
+  S.running=true;
+  S.endAt=Date.now()+((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
+  S.pausedMs=0;
+  S.playStartAt=Date.now();
+  S.playedAccumMs=0;
+  S.players=0;S.maxPlayers=0;S.entries=0;S.avgStack=0;
+  S.prize="R$ 0";S.status="EM ANDAMENTO";S.breakText="—";
+  S.tournamentId=id;
+  S.tournamentName=tItem.name;
+  pub();
+}
+
+/* ===== Editor de estrutura de torneio ===== */
+function openEditor(id){
+  editingId=id;
+  if(id&&TS[id]){
+    q("editorTitle").textContent="Editando: "+TS[id].name;
+    q("edName").value=TS[id].name;
+    editorRows=clone(TS[id].levels&&TS[id].levels.length?TS[id].levels:DEFAULT_LEVELS);
+  }else{
+    q("editorTitle").textContent="Novo Torneio";
+    q("edName").value="";
+    editorRows=clone(DEFAULT_LEVELS);
+  }
+  renderEditorLevels();
+  q("editorPanel").style.display="block";
+  q("editorPanel").scrollIntoView({behavior:"smooth"});
+}
+
+function closeEditor(){
+  q("editorPanel").style.display="none";
+  editingId=null;
+  editorRows=[];
+}
+
+function renderEditorLevels(){
+  q("edLevels").innerHTML=editorRows.map(function(row,i){
+    return '<div class="lvlrow">'+
+      '<span>Nível '+String(i+1).padStart(2,"0")+'</span>'+
+      '<input type="number" value="'+row[0]+'" onchange="editorRows['+i+'][0]=+this.value||0">'+
+      '<input type="number" value="'+row[1]+'" onchange="editorRows['+i+'][1]=+this.value||0">'+
+      '<input type="number" value="'+(row[2]||0)+'" onchange="editorRows['+i+'][2]=+this.value||0">'+
+      '<input type="number" value="'+(row[3]||20)+'" onchange="editorRows['+i+'][3]=+this.value||20">'+
+      '<button onclick="removeEditorLevel('+i+')">✕</button>'+
+    '</div>';
+  }).join("");
+}
+
+function addEditorLevel(){
+  var last=editorRows[editorRows.length-1]||[100,200,0,20];
+  editorRows.push([last[0]*1.5|0,last[1]*1.5|0,last[2],last[3]]);
+  renderEditorLevels();
+}
+function removeEditorLevel(i){
+  if(editorRows.length<=1){alert("O torneio precisa de pelo menos 1 nível.");return}
+  editorRows.splice(i,1);
+  renderEditorLevels();
+}
+
+function saveTournament(){
+  var name=q("edName").value.trim();
+  if(!name){alert("Dá um nome pro torneio antes de salvar.");return}
+  if(!editorRows.length){alert("Adicione pelo menos 1 nível.");return}
+  var data={name:name,levels:clone(editorRows)};
+  var id=editingId;
+  if(TR){
+    if(!id)id=TR.push().key;
+    TR.child(id).set(data);
+  }else{
+    if(!id)id="t"+Date.now();
+    TS[id]=data;
+    localStorage.setItem("po_tournaments",JSON.stringify(TS));
+    render();
+  }
+  closeEditor();
+}
+
+function deleteTournament(id){
+  if(!confirm("Excluir este torneio salvo? Isso não afeta o que já está rodando na tela."))return;
+  if(TR){TR.child(id).remove()}
+  else{delete TS[id];localStorage.setItem("po_tournaments",JSON.stringify(TS));render()}
+}
+
+/* ===== Conexão ===== */
 try{
   if(firebaseConfig.apiKey!=="COLE_AQUI"){
     firebase.initializeApp(firebaseConfig);
-    R=firebase.database().ref("poker_osasco/current");
-    R.on("value",function(x){if(x.val()){S=Object.assign({},S,x.val());render()}else pub()});
+    CR=firebase.database().ref("poker_osasco/current");
+    TR=firebase.database().ref("poker_osasco/tournaments");
+    CR.on("value",function(x){
+      var v=x.val();
+      if(v){S=Object.assign({},S,v);if(!S.levels||!S.levels.length)S.levels=clone(DEFAULT_LEVELS);render()}
+      else pub();
+    });
+    TR.on("value",function(x){TS=x.val()||{};render()});
     q("conn").textContent="ONLINE";q("conn").className="ok";
+  }else{
+    try{
+      var rawT=localStorage.getItem("po_tournaments");
+      if(rawT)TS=JSON.parse(rawT);
+      var rawS=localStorage.getItem("po_state");
+      if(rawS)S=Object.assign({},S,JSON.parse(rawS));
+    }catch(e){}
   }
 }catch(e){q("conn").textContent="ERRO FIREBASE"}
+
+setInterval(render,1000);
 render();
-</script></body></html>
+</script>
+</body></html>
