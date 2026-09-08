@@ -68,6 +68,13 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
     </div>
     <p class="hint">"REINICIAR NÍVEL" zera só o cronômetro do nível atual. "RESET GERAL" zera jogadores/prize/nível e recomeça o torneio carregado do zero.</p>
 
+    <div class="actions" style="grid-template-columns:repeat(4,1fr);margin-top:16px">
+      <button class="r" onclick="quickAdjust(-60000)">−1 MIN</button>
+      <button class="r" onclick="quickAdjust(-10000)">−10 SEG</button>
+      <button class="d" onclick="quickAdjust(10000)">+10 SEG</button>
+      <button class="d" onclick="quickAdjust(60000)">+1 MIN</button>
+    </div>
+
     <div class="fields" style="margin-top:16px">
       <div><label>AJUSTAR TEMPO — MIN</label><input id="adjMin" type="number" min="0" value="0"></div>
       <div><label>AJUSTAR TEMPO — SEG</label><input id="adjSec" type="number" min="0" max="59" value="0"></div>
@@ -223,10 +230,7 @@ function resetTime(){
 }
 
 /* ===== Ajuste fino do tempo restante do nível atual (em minutos/segundos) ===== */
-function adjustTime(sign){
-  var mins=Math.max(0,+q("adjMin").value||0);
-  var secs=Math.max(0,+q("adjSec").value||0);
-  var deltaMs=(mins*60+secs)*1000*sign;
+function applyDelta(deltaMs){
   if(!deltaMs)return;
   if(S.running){
     S.endAt=Math.max(Date.now(),S.endAt+deltaMs);
@@ -234,6 +238,12 @@ function adjustTime(sign){
     S.pausedMs=Math.max(0,(S.pausedMs||0)+deltaMs);
   }
   pub();
+}
+function quickAdjust(ms){applyDelta(ms)}
+function adjustTime(sign){
+  var mins=Math.max(0,+q("adjMin").value||0);
+  var secs=Math.max(0,+q("adjSec").value||0);
+  applyDelta((mins*60+secs)*1000*sign);
 }
 
 function next(){chooseLevel(S.level+1)}
