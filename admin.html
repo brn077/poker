@@ -38,6 +38,7 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
 .lvlrow.dragging{opacity:.35}
 .lvlrow .handle{cursor:grab;color:#9fa6b1}
 .lvlrow:active{cursor:grabbing}
+.lvlrow.activelvl{outline:2px solid #e2a82f;border-radius:8px;background:rgba(226,168,47,.08)}
 .prow{display:grid;grid-template-columns:1.4fr 1fr 40px;gap:6px;align-items:center;margin-bottom:6px;cursor:grab}
 .prow.dragging{opacity:.35}
 .prow .handle{color:#9fa6b1}
@@ -105,8 +106,27 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
   <section class="p"><h2>ESTRUTURA ATIVA</h2>
     <p class="hint" id="activeName">Nenhum torneio carregado</p>
     <div class="levels" id="levels"></div>
+    <button class="d" style="width:100%;margin-top:12px" onclick="openLiveEditor()">✏️ CORRIGIR ESTRUTURA EM CURSO</button>
+    <p class="hint">Corrige valores errados (SB/BB/Ante/min) sem reiniciar o cronômetro, jogadores ou nível atual.</p>
   </section>
 </div>
+
+<section class="p" id="liveEditorPanel" style="display:none">
+  <h2>Corrigir Estrutura em Curso</h2>
+  <p class="hint">O nível marcado como <b>EM ANDAMENTO</b> é o que está valendo na tela agora — o cronômetro dele NÃO é afetado ao salvar aqui, só os valores/ordem dos níveis. Não dá pra excluir o nível em andamento.</p>
+  <p class="hint">Arraste pelo ⋮⋮ pra reordenar.</p>
+  <div class="lvlhead"><span>Nível</span><span>SB</span><span>BB</span><span>Ante</span><span>Min</span><span>Interv.</span><span></span></div>
+  <div id="liveEditLevels"></div>
+  <div class="actions" style="grid-template-columns:1fr 1fr">
+    <button onclick="addLiveLevel()">+ NÍVEL</button>
+    <button class="d" onclick="addLiveBreak()">+ INTERVALO</button>
+  </div>
+  <div class="actions" style="grid-template-columns:1fr 1fr;margin-top:10px">
+    <button onclick="saveLiveStructure(false)">SALVAR (só esta partida)</button>
+    <button class="d" id="btnSaveLiveTemplate" onclick="saveLiveStructure(true)">SALVAR + ATUALIZAR TORNEIO SALVO</button>
+  </div>
+  <button class="r" style="width:100%;margin-top:10px" onclick="closeLiveEditor()">CANCELAR</button>
+</section>
 
 <section class="p"><h2>TORNEIOS SALVOS</h2>
   <div id="tlist"></div>
@@ -488,6 +508,86 @@ function deleteTournament(id){
   if(!confirm("Excluir este torneio salvo? Isso não afeta o que já está rodando na tela."))return;
   if(TR){TR.child(id).remove()}
   else{delete TS[id];localStorage.setItem("po_tournaments",JSON.stringify(TS));render()}
+}
+
+/* ===== Corrigir estrutura EM CURSO (sem reiniciar cronômetro/jogadores/posição) =====
+   Diferente do editor de "Torneios Salvos" (que edita um modelo guardado e só
+   afeta o próximo "USAR NA TELA"), esse editor mexe direto no S.levels que já
+   está rodando na tela agora. A referência liveEditActiveRef rastreia QUAL objeto
+   de nível é o que está em andamento, mesmo que a lista seja reordenada — assim,
+   ao salvar, a gente recalcula o número certo do nível atual (S.level) e NUNCA
+   toca no cronômetro (endAt/pausedMs/running), só corrige os valores/ordem. */
+var liveEditRows=[];
+var liveEditActiveRef=null;
+var liveDragIndex=null;
+
+function openLiveEditor(){
+  liveEditRows=lv().map(function(row){return row.slice()});
+  liveEditActiveRef=liveEditRows[S.level-1]||null;
+  renderLiveLevels();
+  q("btnSaveLiveTemplate").style.display=S.tournamentId?"":"none";
+  q("liveEditorPanel").style.display="block";
+  q("liveEditorPanel").scrollIntoView({behavior:"smooth"});
+}
+function closeLiveEditor(){
+  q("liveEditorPanel").style.display="none";
+  liveEditRows=[];liveEditActiveRef=null;
+}
+function renderLiveLevels(){
+  q("liveEditLevels").innerHTML=liveEditRows.map(function(row,i){
+    var isBreak=row[4]===1;
+    var isActive=row===liveEditActiveRef;
+    return '<div class="lvlrow'+(isActive?" activelvl":"")+'" draggable="true" ondragstart="liveDragStart(event,'+i+')" ondragover="event.preventDefault()" ondrop="liveDrop(event,'+i+')" ondragend="this.classList.remove(\'dragging\')">'+
+      '<span class="handle">⋮⋮ '+(isActive?"▶ ":"")+(isBreak?"Intervalo":"Nível")+' '+String(i+1).padStart(2,"0")+(isActive?" (EM ANDAMENTO)":"")+'</span>'+
+      '<input type="number" value="'+row[0]+'" '+(isBreak?"disabled":"")+' onchange="liveEditRows['+i+'][0]=+this.value||0">'+
+      '<input type="number" value="'+row[1]+'" '+(isBreak?"disabled":"")+' onchange="liveEditRows['+i+'][1]=+this.value||0">'+
+      '<input type="number" value="'+(row[2]||0)+'" '+(isBreak?"disabled":"")+' onchange="liveEditRows['+i+'][2]=+this.value||0">'+
+      '<input type="number" value="'+(row[3]||20)+'" onchange="liveEditRows['+i+'][3]=+this.value||20">'+
+      '<input type="checkbox" '+(isBreak?"checked":"")+' onchange="liveEditRows['+i+'][4]=this.checked?1:0;renderLiveLevels()">'+
+      '<button '+(isActive?'disabled title="Não dá pra excluir o nível em andamento"':'')+' onclick="removeLiveRow('+i+')">✕</button>'+
+    '</div>';
+  }).join("");
+}
+function addLiveLevel(){
+  var last=liveEditRows[liveEditRows.length-1]||[100,200,0,20,0];
+  liveEditRows.push([(last[0]*1.5|0)||100,(last[1]*1.5|0)||200,last[2]||0,last[3]||20,0]);
+  renderLiveLevels();
+}
+function addLiveBreak(){
+  liveEditRows.push([0,0,0,15,1]);
+  renderLiveLevels();
+}
+function removeLiveRow(i){
+  if(liveEditRows[i]===liveEditActiveRef){alert("Não dá pra excluir o nível que está em andamento agora. Corrija os valores dele, ou avance/pause o torneio antes de excluir.");return}
+  if(liveEditRows.length<=1){alert("Precisa sobrar pelo menos 1 nível.");return}
+  liveEditRows.splice(i,1);
+  renderLiveLevels();
+}
+function liveDragStart(e,i){
+  liveDragIndex=i;
+  try{e.dataTransfer.effectAllowed="move"}catch(err){}
+  e.currentTarget.classList.add("dragging");
+}
+function liveDrop(e,i){
+  e.preventDefault();
+  if(liveDragIndex===null||liveDragIndex===i){liveDragIndex=null;return}
+  var item=liveEditRows.splice(liveDragIndex,1)[0];
+  liveEditRows.splice(i,0,item);
+  liveDragIndex=null;
+  renderLiveLevels();
+}
+function saveLiveStructure(alsoTemplate){
+  if(!liveEditRows.length){alert("Precisa de pelo menos 1 nível.");return}
+  var idx=liveEditRows.indexOf(liveEditActiveRef);
+  S.levels=clone(liveEditRows);
+  S.level=idx>=0?(idx+1):Math.max(1,Math.min(S.levels.length,S.level));
+  if(alsoTemplate && S.tournamentId){
+    var data={name:S.tournamentName||S.name,levels:clone(liveEditRows)};
+    if(TR){TR.child(S.tournamentId).set(data)}
+    else{TS[S.tournamentId]=data;localStorage.setItem("po_tournaments",JSON.stringify(TS))}
+  }
+  pub();
+  closeLiveEditor();
 }
 
 /* ===== Conexão ===== */
