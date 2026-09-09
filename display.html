@@ -237,6 +237,7 @@ html,body{
     <aside class="side right">
       <div class="stat"><div class="k">Tempo de Jogo</div><div class="v" id="played">00:00</div></div>
       <div class="stat"><div class="k">Intervalo em</div><div class="v dim" id="breakText">—</div></div>
+      <div class="stat"><div class="k">Premiação</div><div class="v dim" id="prizes">—</div></div>
     </aside>
   </main>
 
@@ -412,6 +413,7 @@ function draw(){
   q("avg").textContent=n(S.avgStack||0);
   q("played").textContent=t(Math.floor(playedMs()/1000));
   q("breakText").textContent=S.breakText||"—";
+  q("prizes").textContent=(S.prizes&&S.prizes.length)?S.prizes.map(function(pr){return pr.label+": "+pr.value}).join(" · "):"—";
 
   q("live").textContent=S.running?"AO VIVO":"PAUSADO";
   q("live").className="live"+(S.running?"":" paused");

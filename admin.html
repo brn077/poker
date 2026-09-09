@@ -34,6 +34,15 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
 .lvlhead{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 70px 40px;gap:6px;margin-bottom:6px}
 .lvlhead span{color:#7d8390;font-size:10px;font-weight:800;text-transform:uppercase}
 .lvlrow input[type=checkbox]{width:22px;height:22px;justify-self:center}
+.lvlrow{cursor:grab}
+.lvlrow.dragging{opacity:.35}
+.lvlrow .handle{cursor:grab;color:#9fa6b1}
+.lvlrow:active{cursor:grabbing}
+.prow{display:grid;grid-template-columns:1.4fr 1fr 40px;gap:6px;align-items:center;margin-bottom:6px;cursor:grab}
+.prow.dragging{opacity:.35}
+.prow .handle{color:#9fa6b1}
+.prow input{padding:9px;font-size:13px}
+.prow button{padding:9px;background:#8b3730}
 .lvlrow input{padding:9px;font-size:13px}
 .lvlrow button{padding:9px;background:#8b3730}
 .editorlevels{max-height:400px;overflow:auto;margin-top:10px}
@@ -104,12 +113,22 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
   <button onclick="openEditor(null)">+ NOVO TORNEIO</button>
 </section>
 
+<section class="p"><h2>FAIXA DE PREMIAÇÃO</h2>
+  <p class="hint">Aparece na tela da TV. Arraste pelo ⋮⋮ pra reordenar as colocações.</p>
+  <div id="prizeRows"></div>
+  <div class="actions" style="grid-template-columns:1fr 1fr">
+    <button onclick="addPrizeRow()">+ COLOCAÇÃO</button>
+    <button onclick="savePrizes()">SALVAR PREMIAÇÃO</button>
+  </div>
+</section>
+
 <section class="p" id="editorPanel" style="display:none">
   <h2 id="editorTitle">Novo Torneio</h2>
   <div class="fields">
     <div class="full"><label>NOME DO TORNEIO</label><input id="edName"></div>
   </div>
   <div class="editorlevels">
+    <p class="hint">Arraste qualquer linha pelo ⋮⋮ pra reordenar os níveis/intervalos.</p>
     <div class="lvlhead"><span>Nível</span><span>SB</span><span>BB</span><span>Ante</span><span>Min</span><span>Interv.</span><span></span></div>
     <div id="edLevels"></div>
   </div>
@@ -271,6 +290,48 @@ function adjustTime(sign){
 function next(){chooseLevel(S.level+1)}
 function prev(){chooseLevel(S.level-1)}
 
+/* ===== Faixa de premiação (aparece na tela da TV) ===== */
+var prizeRows=null;
+var prizeDragIndex=null;
+function defaultPrizes(){return [{label:"1º Lugar",value:"R$ 0"},{label:"2º Lugar",value:"R$ 0"},{label:"3º Lugar",value:"R$ 0"}]}
+function prizeDragStart(e,i){
+  prizeDragIndex=i;
+  try{e.dataTransfer.effectAllowed="move"}catch(err){}
+  e.currentTarget.classList.add("dragging");
+}
+function prizeDrop(e,i){
+  e.preventDefault();
+  if(prizeDragIndex===null||prizeDragIndex===i){prizeDragIndex=null;return}
+  var item=prizeRows.splice(prizeDragIndex,1)[0];
+  prizeRows.splice(i,0,item);
+  prizeDragIndex=null;
+  renderPrizeRows();
+}
+function renderPrizeRows(){
+  if(!prizeRows)prizeRows=defaultPrizes();
+  q("prizeRows").innerHTML=prizeRows.map(function(row,i){
+    return '<div class="prow" draggable="true" ondragstart="prizeDragStart(event,'+i+')" ondragover="event.preventDefault()" ondrop="prizeDrop(event,'+i+')" ondragend="this.classList.remove(\'dragging\')">'+
+      '<input value="'+row.label+'" onchange="prizeRows['+i+'].label=this.value">'+
+      '<input value="'+row.value+'" onchange="prizeRows['+i+'].value=this.value">'+
+      '<button onclick="removePrizeRow('+i+')">✕</button>'+
+    '</div>';
+  }).join("");
+}
+function addPrizeRow(){
+  if(!prizeRows)prizeRows=defaultPrizes();
+  prizeRows.push({label:(prizeRows.length+1)+"º Lugar",value:"R$ 0"});
+  renderPrizeRows();
+}
+function removePrizeRow(i){
+  prizeRows.splice(i,1);
+  renderPrizeRows();
+}
+function savePrizes(){
+  if(!prizeRows)prizeRows=defaultPrizes();
+  S.prizes=clone(prizeRows);
+  pub();
+}
+
 /* ===== Imagem de fundo da tela =====
    A imagem é redimensionada no navegador (máx. 1920x1080, JPEG) antes de salvar,
    pra não travar a sincronização com um arquivo gigante. */
@@ -360,11 +421,26 @@ function closeEditor(){
   editorRows=[];
 }
 
+var lvlDragIndex=null;
+function lvlDragStart(e,i){
+  lvlDragIndex=i;
+  try{e.dataTransfer.effectAllowed="move"}catch(err){}
+  e.currentTarget.classList.add("dragging");
+}
+function lvlDrop(e,i){
+  e.preventDefault();
+  if(lvlDragIndex===null||lvlDragIndex===i){lvlDragIndex=null;return}
+  var item=editorRows.splice(lvlDragIndex,1)[0];
+  editorRows.splice(i,0,item);
+  lvlDragIndex=null;
+  renderEditorLevels();
+}
+
 function renderEditorLevels(){
   q("edLevels").innerHTML=editorRows.map(function(row,i){
     var isBreak=row[4]===1;
-    return '<div class="lvlrow">'+
-      '<span>'+(isBreak?"Intervalo":"Nível")+' '+String(i+1).padStart(2,"0")+'</span>'+
+    return '<div class="lvlrow" draggable="true" ondragstart="lvlDragStart(event,'+i+')" ondragover="event.preventDefault()" ondrop="lvlDrop(event,'+i+')" ondragend="this.classList.remove(\'dragging\')">'+
+      '<span class="handle">⋮⋮ '+(isBreak?"Intervalo":"Nível")+' '+String(i+1).padStart(2,"0")+'</span>'+
       '<input type="number" value="'+row[0]+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][0]=+this.value||0">'+
       '<input type="number" value="'+row[1]+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][1]=+this.value||0">'+
       '<input type="number" value="'+(row[2]||0)+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][2]=+this.value||0">'+
@@ -425,6 +501,7 @@ try{
       var v=x.val();
       if(v){S=Object.assign({},S,v);if(!S.levels||!S.levels.length)S.levels=clone(DEFAULT_LEVELS);render()}
       else pub();
+      if(prizeRows===null){prizeRows=(S.prizes&&S.prizes.length)?clone(S.prizes):defaultPrizes();renderPrizeRows()}
     });
     TR.on("value",function(x){TS=x.val()||{};render()});
     q("conn").textContent="ONLINE";q("conn").className="ok";
@@ -435,6 +512,8 @@ try{
       var rawS=localStorage.getItem("po_state");
       if(rawS)S=Object.assign({},S,JSON.parse(rawS));
     }catch(e){}
+    prizeRows=(S.prizes&&S.prizes.length)?clone(S.prizes):defaultPrizes();
+    renderPrizeRows();
   }
 }catch(e){q("conn").textContent="ERRO FIREBASE"}
 
