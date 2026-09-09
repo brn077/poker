@@ -121,6 +121,58 @@ html,body{
   font-size:2.9vmin;
 }
 
+/* ===== PÓDIO DE PREMIAÇÃO ===== */
+.side.right.prizeboard{
+  display:flex;flex-direction:column;
+  justify-content:flex-start;
+  overflow:hidden;
+}
+.prizetitle{
+  color:#8d9096;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  font-size:18px;font-size:1.9vmin;margin-bottom:10px;margin-bottom:1.4vmin;
+}
+.podium{display:flex;flex-direction:column}
+.pod{
+  border-radius:10px;border-radius:1vmin;
+  padding:10px 14px;padding:1.1vmin 1.4vmin;
+  margin-bottom:10px;margin-bottom:1.1vmin;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.07);
+}
+.pod .pos{font-weight:900;text-transform:uppercase;letter-spacing:.02em;line-height:1}
+.pod .val{font-weight:900;line-height:1.08;word-break:break-word;margin-top:4px;margin-top:.5vmin}
+.pod1{background:linear-gradient(135deg,rgba(243,181,45,.18),rgba(243,181,45,.05));border-color:rgba(243,181,45,.55)}
+.pod1 .pos{color:var(--gold);font-size:26px;font-size:2.9vmin}
+.pod1 .val{color:#fff;font-size:52px;font-size:5.8vmin}
+.pod2 .pos{color:#d7dbe0;font-size:20px;font-size:2.2vmin}
+.pod2 .val{color:#fff;font-size:36px;font-size:4vmin}
+.pod3 .pos{color:#dda06a;font-size:18px;font-size:2vmin}
+.pod3 .val{color:#fff;font-size:30px;font-size:3.3vmin}
+
+.ticker{
+  position:relative;flex:1 1 auto;min-height:0;overflow:hidden;
+  margin-top:6px;margin-top:.8vmin;
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 10%,#000 90%,transparent);
+  mask-image:linear-gradient(to bottom,transparent,#000 10%,#000 90%,transparent);
+}
+.ticker-track{
+  position:absolute;left:0;right:0;top:0;
+  display:flex;flex-direction:column;
+  animation-name:tickerUp;animation-timing-function:linear;animation-iteration-count:infinite;
+}
+.ticker-item{
+  padding:10px 0;padding:1.1vmin 0;
+  border-top:1px solid #222327;
+  color:#e4e6e9;font-weight:700;
+  font-size:22px;font-size:2.4vmin;
+  display:flex;justify-content:space-between;gap:10px;
+}
+.ticker-item b{color:var(--gold);font-weight:900}
+@keyframes tickerUp{
+  from{transform:translateY(0)}
+  to{transform:translateY(-50%)}
+}
+
 .center{
   min-width:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;text-align:center;
@@ -135,6 +187,9 @@ html,body{
 #timer.warn{color:#ff9c26}
 #timer.danger{color:#ee5144;animation:pulse 1s infinite}
 #timer.pause{color:#9aa0a8}
+#timer.intervalo{color:#3fd0ff}
+#timer.intervalo.warn{color:#ffd35c}
+#timer.intervalo.danger{color:#ff5c5c;animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
 
 .blindlabel{
@@ -223,6 +278,8 @@ html,body{
       <div class="stat"><div class="k">Nível <span id="level">01</span></div></div>
       <div class="stat"><div class="k">Jogadores</div><div class="v" id="players">0</div></div>
       <div class="stat"><div class="k">Média</div><div class="v" id="avg">0</div></div>
+      <div class="stat"><div class="k">Tempo de Jogo</div><div class="v dim" id="played">00:00</div></div>
+      <div class="stat"><div class="k">Próximo Intervalo</div><div class="v dim" id="breakText">—</div></div>
     </aside>
 
     <section class="center">
@@ -234,10 +291,16 @@ html,body{
       <div class="centerlogo" id="centerLogo"></div>
     </section>
 
-    <aside class="side right">
-      <div class="stat"><div class="k">Tempo de Jogo</div><div class="v" id="played">00:00</div></div>
-      <div class="stat"><div class="k">Intervalo em</div><div class="v dim" id="breakText">—</div></div>
-      <div class="stat"><div class="k">Premiação</div><div class="v dim" id="prizes">—</div></div>
+    <aside class="side right prizeboard">
+      <div class="prizetitle">Premiação</div>
+      <div class="podium">
+        <div class="pod pod1" id="pod1"><div class="pos" id="pod1pos">🏆 1º</div><div class="val" id="pod1val">—</div></div>
+        <div class="pod pod2" id="pod2"><div class="pos" id="pod2pos">2º</div><div class="val" id="pod2val">—</div></div>
+        <div class="pod pod3" id="pod3"><div class="pos" id="pod3pos">3º</div><div class="val" id="pod3val">—</div></div>
+      </div>
+      <div class="ticker" id="prizeTicker">
+        <div class="ticker-track" id="prizeTickerTrack"></div>
+      </div>
     </aside>
   </main>
 
@@ -383,6 +446,57 @@ function fitName(){
   });
 }
 
+/* ===== Pódio de premiação + ticker vertical =====
+   Só remonta o HTML/reinicia a animação quando a lista de prêmios realmente muda,
+   pra não travar o scroll do ticker toda hora (o draw() roda a cada 250ms). */
+var lastPrizesJSON=null;
+function setPod(n,item){
+  var box=q("pod"+n),pos=q("pod"+n+"pos"),val=q("pod"+n+"val");
+  if(item){
+    pos.textContent=(n===1?"🏆 ":"")+item.label;
+    val.textContent=item.value;
+    box.style.display="";
+  }else{
+    box.style.display="none";
+  }
+}
+function renderPrizes(){
+  var prizes=(S.prizes&&S.prizes.length)?S.prizes:[];
+  var json=JSON.stringify(prizes);
+  if(json===lastPrizesJSON)return;
+  lastPrizesJSON=json;
+
+  var top3=prizes.slice(0,3);
+  var rest=prizes.slice(3);
+  setPod(1,top3[0]);
+  setPod(2,top3[1]);
+  setPod(3,top3[2]);
+
+  var wrap=q("prizeTicker"),track=q("prizeTickerTrack");
+  if(rest.length){
+    var html=rest.map(function(pr){return '<div class="ticker-item"><span>'+pr.label+'</span><b>'+pr.value+'</b></div>'}).join("");
+    track.innerHTML=html+html; // duplica a lista pra criar um loop contínuo
+    track.style.animationDuration=Math.max(8,rest.length*2.6)+"s";
+    wrap.style.display="";
+  }else{
+    track.style.animationDuration="";
+    track.innerHTML="";
+    wrap.style.display="none";
+  }
+}
+
+/* ===== Tempo até o próximo intervalo (calculado a partir da estrutura de níveis) ===== */
+function timeToNextBreakText(levels,remMs){
+  for(var i=S.level;i<levels.length;i++){ // levels[S.level] em diante = níveis seguintes ao atual (0-based)
+    if(levels[i][4]===1){
+      var ms=remMs;
+      for(var j=S.level;j<i;j++)ms+=((levels[j][3]||20)*60000);
+      return t(Math.floor(ms/1000));
+    }
+  }
+  return "—";
+}
+
 function draw(){
   var levels=lv();
   var cur=levels[S.level-1]||[0,0,0,20];
@@ -412,12 +526,11 @@ function draw(){
   q("players").textContent=(S.players||0)+(S.maxPlayers?"/"+S.maxPlayers:"");
   q("avg").textContent=n(S.avgStack||0);
   q("played").textContent=t(Math.floor(playedMs()/1000));
-  q("breakText").textContent=S.breakText||"—";
-  q("prizes").textContent=(S.prizes&&S.prizes.length)?S.prizes.map(function(pr){return pr.label+": "+pr.value}).join(" · "):"—";
+  q("breakText").textContent=curIsBreak?"Agora!":timeToNextBreakText(levels,remMs);
 
   q("live").textContent=S.running?"AO VIVO":"PAUSADO";
   q("live").className="live"+(S.running?"":" paused");
-  q("timer").className=!S.running?"pause":r<=30?"danger":r<=120?"warn":"";
+  q("timer").className=(!S.running?"pause":(curIsBreak?"intervalo":"")+(r<=30?" danger":r<=120?" warn":"")).trim();
 
   var logoSrc=S.logoUrl||DEFAULT_LOGO;
   q("mark").innerHTML='<img src="'+logoSrc+'" alt="logo">';
@@ -435,6 +548,7 @@ function draw(){
     appEl.style.backgroundImage="";
   }
 
+  renderPrizes();
   fitName();
 }
 
