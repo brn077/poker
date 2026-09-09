@@ -286,7 +286,7 @@ html,body{
       <div id="timer">20:00</div>
       <div class="blindlabel">Blind atual</div>
       <div id="blind">100 / 200</div>
-      <div id="ante">Button Ante 0</div>
+      <div id="ante">Big Blind Ante 0</div>
       <div id="next">Próximo Nível <b>150 / 300 (0)</b></div>
       <div class="centerlogo" id="centerLogo"></div>
     </section>
@@ -517,7 +517,7 @@ function draw(){
     q("ante").textContent="Volta já já...";
   }else{
     q("blind").textContent=n(cur[0])+" / "+n(cur[1]);
-    q("ante").textContent="Button Ante "+n(cur[2]||0);
+    q("ante").textContent="Big Blind Ante "+n(cur[2]||0);
   }
   q("next").innerHTML=nxt
     ? (nxtIsBreak?"Próximo: <b>INTERVALO</b>":"Próximo Nível <b>"+n(nxt[0])+" / "+n(nxt[1])+" ("+n(nxt[2]||0)+")</b>")
