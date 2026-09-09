@@ -29,14 +29,15 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
 .tbtns{display:flex;gap:6px;flex-wrap:wrap}
 .tbtns button{padding:9px 12px;font-size:12px}
 .hint{color:#7d8390;font-size:12px;margin:8px 0 0}
-.lvlrow{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 40px;gap:6px;align-items:center;margin-bottom:6px}
+.lvlrow{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 70px 40px;gap:6px;align-items:center;margin-bottom:6px}
 .lvlrow span{color:#7d8390;font-size:10px;font-weight:800;text-transform:uppercase}
-.lvlhead{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr 40px;gap:6px;margin-bottom:6px}
+.lvlhead{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 70px 40px;gap:6px;margin-bottom:6px}
 .lvlhead span{color:#7d8390;font-size:10px;font-weight:800;text-transform:uppercase}
+.lvlrow input[type=checkbox]{width:22px;height:22px;justify-self:center}
 .lvlrow input{padding:9px;font-size:13px}
 .lvlrow button{padding:9px;background:#8b3730}
 .editorlevels{max-height:400px;overflow:auto;margin-top:10px}
-@media(max-width:800px){.grid,.fields{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.lvlrow,.lvlhead{grid-template-columns:1fr 1fr 1fr 1fr 1fr 32px}}
+@media(max-width:800px){.grid,.fields{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.lvlrow,.lvlhead{grid-template-columns:1fr 1fr 1fr 1fr 1fr 55px 32px}}
 @media(max-width:480px){.actions{grid-template-columns:1fr}}
 </style></head>
 <body><div class="w">
@@ -57,6 +58,12 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
       <div><label>STATUS</label><input id="status"></div>
       <div><label>INTERVALO EM</label><input id="breakText"></div>
       <div class="full"><label>LOGO (URL, opcional)</label><input id="logoUrl" placeholder="https://..."></div>
+      <div class="full">
+        <label>IMAGEM DE FUNDO DA TELA (escolha um arquivo)</label>
+        <input id="bgFile" type="file" accept="image/*">
+        <p class="hint" id="bgStatus">Nenhuma imagem de fundo definida.</p>
+        <button class="r" style="margin-top:6px;width:100%" onclick="removeBg()">REMOVER FUNDO</button>
+      </div>
     </div>
     <div class="actions">
       <button onclick="apply()">SALVAR ALTERAÇÕES</button>
@@ -103,11 +110,12 @@ button{border:0;border-radius:8px;padding:13px;background:#c68a23;color:#fff;fon
     <div class="full"><label>NOME DO TORNEIO</label><input id="edName"></div>
   </div>
   <div class="editorlevels">
-    <div class="lvlhead"><span>Nível</span><span>SB</span><span>BB</span><span>Ante</span><span>Min</span><span></span></div>
+    <div class="lvlhead"><span>Nível</span><span>SB</span><span>BB</span><span>Ante</span><span>Min</span><span>Interv.</span><span></span></div>
     <div id="edLevels"></div>
   </div>
-  <div class="actions" style="grid-template-columns:1fr 1fr 1fr">
+  <div class="actions" style="grid-template-columns:1fr 1fr 1fr 1fr">
     <button onclick="addEditorLevel()">+ NÍVEL</button>
+    <button class="d" onclick="addEditorBreak()">+ INTERVALO</button>
     <button onclick="saveTournament()">SALVAR TORNEIO</button>
     <button class="d" onclick="closeEditor()">CANCELAR</button>
   </div>
@@ -127,13 +135,21 @@ var DEFAULT_LEVELS=[
   [2500,5000,0,20],[3000,6000,0,20],[4000,8000,0,20],[5000,10000,0,20]
 ];
 
+/* ===== Relógio sincronizado com o servidor do Firebase =====
+   Cada dispositivo (PC do admin, TV) tem seu próprio relógio interno, que pode estar
+   alguns segundos adiantado/atrasado. Se cada um calcular o tempo restante usando o
+   PRÓPRIO relógio, os dois mostram números diferentes. now() corrige isso somando a
+   diferença em relação ao relógio do servidor do Firebase, que é a mesma para todo mundo. */
+var serverOffset=0;
+function now(){return Date.now()+serverOffset}
+
 /* ===== Estado atual (o que a tela da TV mostra) ===== */
 var S={
   name:"TORNEIO DOS AMIGOS",levels:clone(DEFAULT_LEVELS),level:1,
-  running:true,endAt:Date.now()+20*60000,pausedMs:0,
-  playStartAt:Date.now(),playedAccumMs:0,
+  running:true,endAt:now()+20*60000,pausedMs:0,
+  playStartAt:now(),playedAccumMs:0,
   players:0,maxPlayers:0,entries:0,avgStack:0,prize:"R$ 0",
-  status:"EM ANDAMENTO",breakText:"—",logoUrl:"",
+  status:"EM ANDAMENTO",breakText:"—",logoUrl:"",bgUrl:"",
   tournamentId:null,tournamentName:""
 };
 
@@ -150,7 +166,7 @@ function f(x){x=Math.max(0,Math.floor(+x||0));return String(Math.floor(x/60)).pa
 function lv(){return (S.levels&&S.levels.length)?S.levels:DEFAULT_LEVELS}
 
 function remainingMs(){
-  if(S.running){ if(!S.endAt) return 0; return Math.max(0,S.endAt-Date.now()); }
+  if(S.running){ if(!S.endAt) return 0; return Math.max(0,S.endAt-now()); }
   return Math.max(0,S.pausedMs||0);
 }
 
@@ -161,9 +177,14 @@ function render(){
 
   q("activeName").textContent=S.tournamentName?("Torneio carregado: "+S.tournamentName):"Nenhum torneio carregado (usando estrutura padrão)";
   q("btnPause").textContent=S.running?"PAUSAR":"▶ INICIAR";
+  q("bgStatus").textContent=S.bgUrl?"Imagem de fundo definida ✓":"Nenhuma imagem de fundo definida.";
 
   q("levels").innerHTML=lv().map(function(x,i){
-    return '<div class="lv '+(S.level==i+1?"on":"")+'" onclick="chooseLevel('+(i+1)+')"><b>NÍVEL '+String(i+1).padStart(2,"0")+'</b><br>'+x[0].toLocaleString("pt-BR")+' / '+x[1].toLocaleString("pt-BR")+'<i>Ante '+(x[2]||0).toLocaleString("pt-BR")+' · '+(x[3]||20)+' min</i></div>';
+    var isBreak=x[4]===1;
+    var body=isBreak
+      ? '<b>INTERVALO '+String(i+1).padStart(2,"0")+'</b><br>—<i>'+(x[3]||20)+' min de pausa</i>'
+      : '<b>NÍVEL '+String(i+1).padStart(2,"0")+'</b><br>'+x[0].toLocaleString("pt-BR")+' / '+x[1].toLocaleString("pt-BR")+'<i>Ante '+(x[2]||0).toLocaleString("pt-BR")+' · '+(x[3]||20)+' min</i>';
+    return '<div class="lv '+(S.level==i+1?"on":"")+'" onclick="chooseLevel('+(i+1)+')">'+body+'</div>';
   }).join("");
 
   q("tlist").innerHTML=Object.keys(TS).length?Object.keys(TS).map(function(id){
@@ -200,21 +221,22 @@ function chooseLevel(x){
   x=Math.max(1,Math.min(levels.length,x));
   S.level=x;
   var mins=(levels[x-1]&&levels[x-1][3])?levels[x-1][3]:20;
-  var ms=mins*60000;
-  /* Preserva se estava rodando ou pausado — só troca pro tempo cheio do novo nível */
-  if(S.running){S.endAt=Date.now()+ms}
-  else{S.pausedMs=ms}
+  /* Selecionar/ativar um nível sempre vai pra ele e começa a contar do tempo cheio dele */
+  if(!S.running)S.playStartAt=now();
+  S.running=true;
+  S.endAt=now()+mins*60000;
+  S.pausedMs=0;
   pub();
 }
 
 function pause(){
   if(S.running){
     S.pausedMs=remainingMs();
-    S.playedAccumMs=(S.playedAccumMs||0)+(Date.now()-(S.playStartAt||Date.now()));
+    S.playedAccumMs=(S.playedAccumMs||0)+(now()-(S.playStartAt||now()));
     S.running=false;
   }else{
-    S.endAt=Date.now()+(S.pausedMs||0);
-    S.playStartAt=Date.now();
+    S.endAt=now()+(S.pausedMs||0);
+    S.playStartAt=now();
     S.running=true;
   }
   pub();
@@ -224,7 +246,7 @@ function resetTime(){
   var levels=lv();
   var mins=(levels[S.level-1]&&levels[S.level-1][3])?levels[S.level-1][3]:20;
   var ms=mins*60000;
-  if(S.running){S.endAt=Date.now()+ms}
+  if(S.running){S.endAt=now()+ms}
   else{S.pausedMs=ms}
   pub();
 }
@@ -233,7 +255,7 @@ function resetTime(){
 function applyDelta(deltaMs){
   if(!deltaMs)return;
   if(S.running){
-    S.endAt=Math.max(Date.now(),S.endAt+deltaMs);
+    S.endAt=Math.max(now(),S.endAt+deltaMs);
   }else{
     S.pausedMs=Math.max(0,(S.pausedMs||0)+deltaMs);
   }
@@ -249,14 +271,45 @@ function adjustTime(sign){
 function next(){chooseLevel(S.level+1)}
 function prev(){chooseLevel(S.level-1)}
 
+/* ===== Imagem de fundo da tela =====
+   A imagem é redimensionada no navegador (máx. 1920x1080, JPEG) antes de salvar,
+   pra não travar a sincronização com um arquivo gigante. */
+function handleBgFile(file){
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    var img=new Image();
+    img.onload=function(){
+      var maxW=1920,maxH=1080;
+      var scale=Math.min(1,maxW/img.width,maxH/img.height);
+      var cw=Math.max(1,Math.round(img.width*scale));
+      var ch=Math.max(1,Math.round(img.height*scale));
+      var canvas=document.createElement("canvas");
+      canvas.width=cw;canvas.height=ch;
+      canvas.getContext("2d").drawImage(img,0,0,cw,ch);
+      S.bgUrl=canvas.toDataURL("image/jpeg",0.82);
+      pub();
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+q("bgFile").addEventListener("change",function(e){
+  var file=e.target.files&&e.target.files[0];
+  if(file)handleBgFile(file);
+});
+function removeBg(){
+  S.bgUrl="";
+  pub();
+}
+
 function resetAll(){
   if(!confirm("Isso vai reiniciar o torneio carregado do nível 1, zerando jogadores/prize/tempo. Confirma?"))return;
   var levels=lv();
   S.level=1;
   S.running=true;
-  S.endAt=Date.now()+((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
+  S.endAt=now()+((levels[0]&&levels[0][3])?levels[0][3]:20)*60000;
   S.pausedMs=0;
-  S.playStartAt=Date.now();
+  S.playStartAt=now();
   S.playedAccumMs=0;
   S.players=0;S.maxPlayers=0;S.entries=0;S.avgStack=0;
   S.prize="R$ 0";S.status="EM ANDAMENTO";S.breakText="—";
@@ -309,20 +362,26 @@ function closeEditor(){
 
 function renderEditorLevels(){
   q("edLevels").innerHTML=editorRows.map(function(row,i){
+    var isBreak=row[4]===1;
     return '<div class="lvlrow">'+
-      '<span>Nível '+String(i+1).padStart(2,"0")+'</span>'+
-      '<input type="number" value="'+row[0]+'" onchange="editorRows['+i+'][0]=+this.value||0">'+
-      '<input type="number" value="'+row[1]+'" onchange="editorRows['+i+'][1]=+this.value||0">'+
-      '<input type="number" value="'+(row[2]||0)+'" onchange="editorRows['+i+'][2]=+this.value||0">'+
+      '<span>'+(isBreak?"Intervalo":"Nível")+' '+String(i+1).padStart(2,"0")+'</span>'+
+      '<input type="number" value="'+row[0]+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][0]=+this.value||0">'+
+      '<input type="number" value="'+row[1]+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][1]=+this.value||0">'+
+      '<input type="number" value="'+(row[2]||0)+'" '+(isBreak?"disabled":"")+' onchange="editorRows['+i+'][2]=+this.value||0">'+
       '<input type="number" value="'+(row[3]||20)+'" onchange="editorRows['+i+'][3]=+this.value||20">'+
+      '<input type="checkbox" '+(isBreak?"checked":"")+' onchange="editorRows['+i+'][4]=this.checked?1:0;renderEditorLevels()">'+
       '<button onclick="removeEditorLevel('+i+')">✕</button>'+
     '</div>';
   }).join("");
 }
 
 function addEditorLevel(){
-  var last=editorRows[editorRows.length-1]||[100,200,0,20];
-  editorRows.push([last[0]*1.5|0,last[1]*1.5|0,last[2],last[3]]);
+  var last=editorRows[editorRows.length-1]||[100,200,0,20,0];
+  editorRows.push([(last[0]*1.5|0)||100,(last[1]*1.5|0)||200,last[2]||0,last[3]||20,0]);
+  renderEditorLevels();
+}
+function addEditorBreak(){
+  editorRows.push([0,0,0,15,1]);
   renderEditorLevels();
 }
 function removeEditorLevel(i){
@@ -359,6 +418,7 @@ function deleteTournament(id){
 try{
   if(firebaseConfig.apiKey!=="COLE_AQUI"){
     firebase.initializeApp(firebaseConfig);
+    firebase.database().ref(".info/serverTimeOffset").on("value",function(snap){serverOffset=snap.val()||0});
     CR=firebase.database().ref("poker_osasco/current");
     TR=firebase.database().ref("poker_osasco/tournaments");
     CR.on("value",function(x){
